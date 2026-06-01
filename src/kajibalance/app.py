@@ -43,7 +43,7 @@ CSS = f"""
     --text-muted: #868E96;
 }}
 .stApp {{ background: var(--bg); }}
-section[data-testid="stSidebar"] {{ background: var(--card-bg); border-right: 1px solid var(--card-border); }}
+section[data-testid="stSidebar"] {{ background: var(--card-bg); border-right: 1px solid var(--card-border); color: var(--text); }}
 .bar-container {{ background: #E9ECEF; height: 28px; border-radius: 14px; overflow: hidden; position: relative; }}
 .bar-fill {{ height: 100%; border-radius: 14px; display: flex; align-items: center; justify-content: flex-end; padding-right: 10px; transition: width 0.5s ease; min-width: 2px; }}
 .bar-pct-inside {{ font-size: 0.75rem; font-weight: 700; color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.2); }}
@@ -186,20 +186,48 @@ def page_tasks():
     st.markdown(CSS, unsafe_allow_html=True)
     st.title("\U0001f4cb \u30bf\u30b9\u30af\u7ba1\u7406")
 
-    col_filter, col_add = st.columns([3, 2])
+    # quick-add templates: one-click common tasks
+    TEMPLATES = [
+        ("\u5915\u98ef\u3092\u4f5c\u308b", "\u6599\u7406", 7, 4),
+        ("\u671d\u98df\u3092\u4f5c\u308b", "\u6599\u7406", 3, 2),
+        ("\u98df\u5668\u6d17\u3044", "\u6599\u7406", 4, 1),
+        ("\u6383\u9664\u6a5f\u3092\u304b\u3051\u308b", "\u6383\u9664", 5, 2),
+        ("\u30c8\u30a4\u30ec\u6383\u9664", "\u6383\u9664", 6, 3),
+        ("\u6d17\u6fef\u30fb\u5e72\u3059\u30fb\u7573\u3080", "\u305d\u306e\u4ed6", 4, 3),
+        ("\u98a8\u5442\u6383\u9664", "\u6383\u9664", 7, 2),
+        ("\u8cb7\u3044\u7269\u884c\u304f", "\u8cb7\u3044\u7269", 4, 5),
+        ("\u30b4\u30df\u51e6\u5206", "\u6383\u9664", 3, 1),
+        ("\u5b50\u4f9b\u306e\u9001\u308a\u8fce\u3048", "\u80b2\u5150", 3, 4),
+    ]
+
+    st.markdown("\u2193 \u30af\u30ea\u30c3\u30af\u3067\u8ffd\u52a0", help="\u3088\u304f\u4f7f\u3046\u30bf\u30b9\u30af\u3092\u4e00\u62ec\u767b\u9332")
+    cols = st.columns(5)
+    for i, (tname, tcat, tphys, tment) in enumerate(TEMPLATES):
+        cat_color = CAT_COLORS.get(tcat, "#999")
+        if cols[i % 5].button(f"{tname}", key=f"q_{i}", use_container_width=True, type="tertiary"):
+            if not any(t.name == tname for t in tasks):
+                tid = get_next_id(tasks)
+                tasks.append(Task(id=tid, name=tname, category=tcat, physical_score=tphys, mental_score=tment, default_frequency="irregular"))
+                save_tasks(tasks)
+                st.rerun()
+
+    with st.container(border=True):
+        c1, c2, c3, c4, c5 = st.columns([3, 1.5, 0.8, 0.8, 1])
+        nn = c1.text_input("\u30bf\u30b9\u30af\u540d", placeholder="\u4f8b: \u30eb\u30f3\u30d0\u3092\u304b\u3051\u308b", label_visibility="collapsed")
+        nc = c2.selectbox("\u30ab\u30c6\u30b4\u30ea", ["\u6599\u7406", "\u6383\u9664", "\u8cb7\u3044\u7269", "\u80b2\u5150", "\u30da\u30c3\u30c8", "\u624b\u7d9a\u304d", "\u305d\u306e\u4ed6"], label_visibility="collapsed")
+        nphys = c3.number_input("\U0001f4aa", value=5, min_value=1, max_value=10, label_visibility="collapsed")
+        nment = c4.number_input("\U0001f9e0", value=3, min_value=1, max_value=10, label_visibility="collapsed")
+        if c5.button("\u8ffd\u52a0", use_container_width=True, type="primary") and nn:
+            if not any(t.name == nn for t in tasks):
+                tid = get_next_id(tasks)
+                tasks.append(Task(id=tid, name=nn, category=nc, physical_score=nphys, mental_score=nment, default_frequency="irregular"))
+                save_tasks(tasks)
+                st.rerun()
+
+    col_filter, _ = st.columns([3, 2])
     with col_filter:
         cats = ["\u3059\u3079\u3066"] + list(dict.fromkeys(t.category for t in tasks))
         sel_cat = st.selectbox("\u30ab\u30c6\u30b4\u30ea\u30d5\u30a3\u30eb\u30bf\u30fc", cats, label_visibility="collapsed")
-    with col_add:
-        expand = st.popover("\uff0b \u30bf\u30b9\u30af\u8ffd\u52a0", use_container_width=True)
-        with expand:
-            nn = st.text_input("\u30bf\u30b9\u30af\u540d", placeholder="\u30bf\u30b9\u30af\u540d", label_visibility="collapsed")
-            nc = st.selectbox("\u30ab\u30c6\u30b4\u30ea", ["\u6599\u7406", "\u6383\u9664", "\u8cb7\u3044\u7269", "\u80b2\u5150", "\u30da\u30c3\u30c8", "\u624b\u7d9a\u304d", "\u305d\u306e\u4ed6"], label_visibility="collapsed")
-            if st.button("\u8ffd\u52a0", use_container_width=True) and nn:
-                tid = get_next_id(tasks)
-                tasks.append(Task(id=tid, name=nn, category=nc, physical_score=5, mental_score=3, default_frequency="irregular"))
-                save_tasks(tasks)
-                st.rerun()
 
     filtered = tasks if sel_cat == "\u3059\u3079\u3066" else [t for t in tasks if t.category == sel_cat]
 
