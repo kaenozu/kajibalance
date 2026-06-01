@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.ruff_cache/
+
+# Virtual environment
+.venv/
+venv/
+
+# Runtime data
+data/*.json
+
+# Screenshots
+screenshots/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Environment
+.env
