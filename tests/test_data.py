@@ -8,7 +8,7 @@ from kajibalance.data import (
     load_tasks, save_tasks,
     load_assignments, save_assignments,
     load_gratitudes, save_gratitudes,
-    load_pair, save_pair,
+    load_pair, save_pair, reset_all_data,
 )
 from kajibalance.models import Task, GratitudePoint, PairConfig
 
@@ -47,9 +47,12 @@ class TestGetNextId:
         tasks = get_initial_tasks()
         assert get_next_id(tasks) == "51"
 
-    def test_with_empty_list(self):
+    def test_with_non_default_start(self):
         tasks = [Task(id="5", name="x", category="料理", physical_score=1, mental_score=1, default_frequency="daily")]
         assert get_next_id(tasks) == "6"
+
+    def test_with_empty_list(self):
+        assert get_next_id([]) == "1"
 
 
 class TestCreateAssignment:
@@ -69,14 +72,15 @@ class TestCreateAssignment:
 
 class TestJsonRoundtrip:
     def test_read_write_json(self, tmp_path):
-        path = str(tmp_path / "test.json")
+        path = tmp_path / "test.json"
         data = [{"key": "value"}]
         _write_json(path, data)
         result = _read_json(path)
         assert result == data
+        assert list(tmp_path.glob(".*.tmp")) == []
 
     def test_read_nonexistent(self, tmp_path):
-        result = _read_json(str(tmp_path / "nonexistent.json"))
+        result = _read_json(tmp_path / "nonexistent.json")
         assert result == []
 
 
@@ -91,9 +95,8 @@ class TestTasksPersistence:
 
     def test_load_tasks_empty_returns_default(self, tmp_path, monkeypatch):
         monkeypatch.setattr("kajibalance.data.TASKS_FILE", tmp_path / "tasks.json")
-        # File doesn't exist yet
         loaded = load_tasks()
-        assert len(loaded) == 50  # Falls back to initial tasks
+        assert len(loaded) == 50
 
 
 class TestAssignmentsPersistence:
@@ -127,6 +130,7 @@ class TestGratitudesPersistence:
         assert loaded[0].from_id == "me"
 
     def test_load_empty(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("kajibalance.data.GRAT_FILE", tmp_path / "gratitudes.json")
         loaded = load_gratitudes()
         assert loaded == []
 
@@ -152,3 +156,27 @@ class TestPairPersistence:
         monkeypatch.setattr("kajibalance.data.PAIR_FILE", tmp_path / "nonexistent.json")
         loaded = load_pair()
         assert isinstance(loaded, PairConfig)
+
+
+class TestResetAllData:
+    def test_resets_all_persisted_user_data(self, tmp_path, monkeypatch):
+        monkeypatch.setattr("kajibalance.data.TASKS_FILE", tmp_path / "tasks.json")
+        monkeypatch.setattr("kajibalance.data.ASSIGN_FILE", tmp_path / "assignments.json")
+        monkeypatch.setattr("kajibalance.data.GRAT_FILE", tmp_path / "gratitudes.json")
+        monkeypatch.setattr("kajibalance.data.PAIR_FILE", tmp_path / "pair.json")
+
+        save_tasks([Task(id="99", name="custom", category="料理", physical_score=1, mental_score=1, default_frequency="daily")])
+        save_assignments([create_assignment("99", "me")])
+        save_gratitudes([GratitudePoint(id="g1", from_id="me", to_id="partner")])
+        save_pair(PairConfig(my_name="太郎", partner_name="花子", paired=True, invite_code="ABCDEFGH"))
+
+        reset_all_data()
+
+        assert len(load_tasks()) == 50
+        assert load_assignments() == []
+        assert load_gratitudes() == []
+        pair = load_pair()
+        assert pair.my_name == "あなた"
+        assert pair.partner_name == "パートナー"
+        assert pair.paired is False
+        assert pair.invite_code == ""
