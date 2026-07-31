@@ -4,6 +4,8 @@
 from pathlib import Path
 from pydantic import TypeAdapter
 import json
+import os
+import tempfile
 import uuid
 from datetime import date
 from .models import Task, TaskAssignment, GratitudePoint, PairConfig
@@ -15,59 +17,89 @@ GRAT_FILE = DATA_DIR / "gratitudes.json"
 PAIR_FILE = DATA_DIR / "pair.json"
 
 
-def _read_json(path: str) -> list | dict:
-    if not Path(path).exists():
+def _read_json(path: str | Path) -> list | dict:
+    target = Path(path)
+    if not target.exists():
         return []
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return json.loads(target.read_text(encoding="utf-8"))
 
 
-def _write_json(path: str, data: list | dict) -> None:
-    Path(path).parent.mkdir(parents=True, exist_ok=True)
-    Path(path).write_text(json.dumps(data, indent=2, ensure_ascii=False, default=str), encoding="utf-8")
+def _write_json(path: str | Path, data: list | dict) -> None:
+    """JSONを同一ディレクトリの一時ファイル経由で原子的に置換する。"""
+    target = Path(path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps(data, indent=2, ensure_ascii=False, default=str)
+
+    temp_path: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="w",
+            encoding="utf-8",
+            dir=target.parent,
+            prefix=f".{target.name}.",
+            suffix=".tmp",
+            delete=False,
+        ) as temp_file:
+            temp_file.write(payload)
+            temp_file.flush()
+            os.fsync(temp_file.fileno())
+            temp_path = Path(temp_file.name)
+        os.replace(temp_path, target)
+    finally:
+        if temp_path is not None and temp_path.exists():
+            temp_path.unlink()
 
 
 def load_tasks() -> list[Task]:
-    raw = _read_json(str(TASKS_FILE))
+    raw = _read_json(TASKS_FILE)
     if not raw:
         return get_initial_tasks()
     return TypeAdapter(list[Task]).validate_python(raw)
 
 
 def save_tasks(tasks: list[Task]) -> None:
-    _write_json(str(TASKS_FILE), TypeAdapter(list[Task]).dump_python(tasks))
+    _write_json(TASKS_FILE, TypeAdapter(list[Task]).dump_python(tasks))
 
 
 def load_assignments() -> list[TaskAssignment]:
-    raw = _read_json(str(ASSIGN_FILE))
+    raw = _read_json(ASSIGN_FILE)
     if not raw:
         return []
     return TypeAdapter(list[TaskAssignment]).validate_python(raw)
 
 
 def save_assignments(assignments: list[TaskAssignment]) -> None:
-    _write_json(str(ASSIGN_FILE), TypeAdapter(list[TaskAssignment]).dump_python(assignments))
+    _write_json(ASSIGN_FILE, TypeAdapter(list[TaskAssignment]).dump_python(assignments))
 
 
 def load_gratitudes() -> list[GratitudePoint]:
-    raw = _read_json(str(GRAT_FILE))
+    raw = _read_json(GRAT_FILE)
     if not raw:
         return []
     return TypeAdapter(list[GratitudePoint]).validate_python(raw)
 
 
 def save_gratitudes(gratitudes: list[GratitudePoint]) -> None:
-    _write_json(str(GRAT_FILE), TypeAdapter(list[GratitudePoint]).dump_python(gratitudes))
+    _write_json(GRAT_FILE, TypeAdapter(list[GratitudePoint]).dump_python(gratitudes))
 
 
 def load_pair() -> PairConfig:
-    raw = _read_json(str(PAIR_FILE))
+    raw = _read_json(PAIR_FILE)
     if isinstance(raw, dict):
         return PairConfig(**raw)
     return PairConfig()
 
 
 def save_pair(pair: PairConfig) -> None:
-    _write_json(str(PAIR_FILE), pair.model_dump())
+    _write_json(PAIR_FILE, pair.model_dump())
+
+
+def reset_all_data() -> None:
+    """ユーザー作成データを永続ストレージごと初期状態へ戻す。"""
+    save_tasks([])
+    save_assignments([])
+    save_gratitudes([])
+    save_pair(PairConfig())
 
 
 def create_assignment(task_id: str, assignee_id: str) -> TaskAssignment:
@@ -81,7 +113,7 @@ def create_assignment(task_id: str, assignee_id: str) -> TaskAssignment:
 
 
 def get_next_id(tasks: list[Task]) -> str:
-    return str(max(int(t.id) for t in tasks) + 1)
+    return str(max((int(t.id) for t in tasks), default=0) + 1)
 
 
 def get_initial_tasks() -> list[Task]:
