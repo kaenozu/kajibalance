@@ -1,14 +1,16 @@
 # src/kajibalance/data.py
 # タスクマスター・割り当て・感謝ポイントのJSON永続化
 
-from pathlib import Path
-from pydantic import TypeAdapter
 import json
 import os
 import tempfile
 import uuid
-from datetime import date
-from .models import Task, TaskAssignment, GratitudePoint, PairConfig
+from datetime import datetime
+from pathlib import Path
+
+from pydantic import TypeAdapter
+
+from .models import GratitudePoint, PairConfig, Task, TaskAssignment
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 TASKS_FILE = DATA_DIR / "tasks.json"
@@ -108,7 +110,7 @@ def create_assignment(task_id: str, assignee_id: str) -> TaskAssignment:
         pair_id="default",
         task_id=task_id,
         assignee_id=assignee_id,
-        due_date=date.today(),
+        due_date=datetime.now().astimezone().date(),
     )
 
 
