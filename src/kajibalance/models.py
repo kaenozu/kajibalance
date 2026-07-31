@@ -7,7 +7,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
-
 Category = Literal["料理", "掃除", "買い物", "育児", "ペット", "手続き", "その他"]
 Frequency = Literal["daily", "weekly", "monthly", "irregular"]
 
