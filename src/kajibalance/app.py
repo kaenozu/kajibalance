@@ -2,27 +2,39 @@
 # Streamlitメインアプリ — UI改善版
 # タスク行のコンパクト化、バランス表示の改善、空状態の充実、統一カラーパレット
 
-import streamlit as st
-import pandas as pd
-import altair as alt
-import uuid
-import random
-import string
 from datetime import date
+import uuid
+
+import altair as alt
+import pandas as pd
+import streamlit as st
+
 from .data import (
-    get_initial_tasks, load_tasks, save_tasks,
-    load_assignments, save_assignments, create_assignment,
-    load_gratitudes, save_gratitudes,
-    load_pair, save_pair, get_next_id,
+    create_assignment,
+    get_initial_tasks,
+    get_next_id,
+    load_assignments,
+    load_gratitudes,
+    load_pair,
+    load_tasks,
+    reset_all_data,
+    save_assignments,
+    save_gratitudes,
+    save_pair,
+    save_tasks,
 )
-from .models import Task, GratitudePoint
+from .models import GratitudePoint, Task
 
-st.set_page_config(page_title="KajiBalance", page_icon="\U0001f3e0", layout="wide")
+st.set_page_config(page_title="KajiBalance", page_icon="🏠", layout="wide")
 
-# ── 統一カラーパレット ──
 CAT_COLORS = {
-    "\u6599\u7406": "#FF9F43", "\u6383\u9664": "#5B8DEF", "\u8cb7\u3044\u7269": "#2ED573",
-    "\u80b2\u5150": "#FF6B6B", "\u30da\u30c3\u30c8": "#A29BFE", "\u624b\u7d9a\u304d": "#FDCB6E", "\u305d\u306e\u4ed6": "#636E72",
+    "料理": "#FF9F43",
+    "掃除": "#5B8DEF",
+    "買い物": "#2ED573",
+    "育児": "#FF6B6B",
+    "ペット": "#A29BFE",
+    "手続き": "#FDCB6E",
+    "その他": "#636E72",
 }
 BLUE = "#5B8DEF"
 ORANGE = "#FF9F43"
@@ -73,27 +85,28 @@ def persist():
 
 
 def calc_scores():
-    aas = st.session_state.assignments
-    tm = {t.id: t for t in load_tasks() or get_initial_tasks()}
-    s = {"me": {"phys": 0, "ment": 0}, "partner": {"phys": 0, "ment": 0}}
-    for a in aas:
-        if a.completed:
-            t = tm.get(a.task_id)
-            if t:
-                s[a.assignee_id]["phys"] += t.physical_score
-                s[a.assignee_id]["ment"] += t.mental_score
-    tp = s["me"]["phys"] + s["partner"]["phys"] or 1
-    tm2 = s["me"]["ment"] + s["partner"]["ment"] or 1
+    assignments = st.session_state.assignments
+    task_map = {task.id: task for task in load_tasks() or get_initial_tasks()}
+    scores = {"me": {"phys": 0, "ment": 0}, "partner": {"phys": 0, "ment": 0}}
+    for assignment in assignments:
+        if not assignment.completed:
+            continue
+        task = task_map.get(assignment.task_id)
+        if task:
+            scores[assignment.assignee_id]["phys"] += task.physical_score
+            scores[assignment.assignee_id]["ment"] += task.mental_score
+
+    total_physical = scores["me"]["phys"] + scores["partner"]["phys"] or 1
+    total_mental = scores["me"]["ment"] + scores["partner"]["ment"] or 1
     return {
-        "me_phys": round(s["me"]["phys"] / tp * 100),
-        "partner_phys": round(s["partner"]["phys"] / tp * 100),
-        "me_ment": round(s["me"]["ment"] / tm2 * 100),
-        "partner_ment": round(s["partner"]["ment"] / tm2 * 100),
+        "me_phys": round(scores["me"]["phys"] / total_physical * 100),
+        "partner_phys": round(scores["partner"]["phys"] / total_physical * 100),
+        "me_ment": round(scores["me"]["ment"] / total_mental * 100),
+        "partner_ment": round(scores["partner"]["ment"] / total_mental * 100),
     }
 
 
 def _bar(pct, color):
-    """Generate an HTML balance bar with percentage inside."""
     show_pct = pct if pct > 18 else 0
     return f"""
     <div class="bar-container">
@@ -105,300 +118,407 @@ def _bar(pct, color):
 
 
 def page_home():
-    s = calc_scores()
+    scores = calc_scores()
     pair = st.session_state.pair
-    aas = st.session_state.assignments
-    today_aas = [a for a in aas if a.due_date == date.today()]
+    assignments = st.session_state.assignments
+    today_assignments = [assignment for assignment in assignments if assignment.due_date == date.today()]
 
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title("\U0001f4ca \u4eca\u9031\u306e\u30d0\u30e9\u30f3\u30b9")
+    st.title("📊 今週のバランス")
 
     col_left, col_right = st.columns([7, 5])
 
     with col_left:
         with st.container(border=True):
-            st.markdown("**\u8ca0\u62c5\u6bd4\u7387**")
+            st.markdown("**負担比率**")
             items = [
-                (f"\U0001f464 {pair.my_name} \u00b7 \u7269\u7406", s["me_phys"], BLUE),
-                (f"\U0001f464 {pair.partner_name} \u00b7 \u7269\u7406", s["partner_phys"], "#9AC4FF"),
-                (f"\U0001f9e0 {pair.my_name} \u00b7 \u30e1\u30f3\u30bf\u30eb", s["me_ment"], ORANGE),
-                (f"\U0001f9e0 {pair.partner_name} \u00b7 \u30e1\u30f3\u30bf\u30eb", s["partner_ment"], "#FFB878"),
+                (f"👤 {pair.my_name} · 物理", scores["me_phys"], BLUE),
+                (f"👤 {pair.partner_name} · 物理", scores["partner_phys"], "#9AC4FF"),
+                (f"🧠 {pair.my_name} · メンタル", scores["me_ment"], ORANGE),
+                (f"🧠 {pair.partner_name} · メンタル", scores["partner_ment"], "#FFB878"),
             ]
             for label, pct, color in items:
                 c1, c2, c3 = st.columns([2.2, 6, 0.8])
                 c1.caption(label)
                 c2.markdown(_bar(pct, color), unsafe_allow_html=True)
-                c3.markdown(f"<span style='font-size:1.1rem;font-weight:800;color:{color};'>{pct}%</span>", unsafe_allow_html=True)
+                c3.markdown(
+                    f"<span style='font-size:1.1rem;font-weight:800;color:{color};'>{pct}%</span>",
+                    unsafe_allow_html=True,
+                )
 
-        if s["me_ment"] > 65 or s["me_phys"] > 65:
-            msgs = []
-            if s["me_ment"] > 65:
-                msgs.append(
-                    f"\U0001f9e0 <b>\u30e1\u30f3\u30bf\u30eb\u8ca0\u62c5\u304c\u504f\u3063\u3066\u3044\u307e\u3059</b> \u2014 "
-                    f"{pair.my_name}\u3055\u3093\u306e\u982d\u3092\u4f7f\u3046\u5bb6\u4e8b\u304c{s['me_ment']}%\u3002"
-                    f"\u6765\u9031\u306f\u5206\u62c5\u3092\u898b\u76f4\u3057\u307e\u3057\u3087\u3046"
+        if scores["me_ment"] > 65 or scores["me_phys"] > 65:
+            messages = []
+            if scores["me_ment"] > 65:
+                messages.append(
+                    f"🧠 <b>メンタル負担が偏っています</b> — "
+                    f"{pair.my_name}さんの頭を使う家事が{scores['me_ment']}%。"
+                    "来週は分担を見直しましょう"
                 )
-            if s["me_phys"] > 65:
-                msgs.append(
-                    f"\U0001f4aa <b>\u7269\u7406\u8ca0\u62c5\u304c\u504f\u3063\u3066\u3044\u307e\u3059</b> \u2014 "
-                    f"{pair.my_name}\u3055\u3093\u306e\u4f53\u3092\u4f7f\u3046\u5bb6\u4e8b\u304c{s['me_phys']}%"
+            if scores["me_phys"] > 65:
+                messages.append(
+                    f"💪 <b>物理負担が偏っています</b> — "
+                    f"{pair.my_name}さんの体を使う家事が{scores['me_phys']}%"
                 )
-            for m in msgs:
-                st.markdown(f"<div class='alert-custom warning'>{m}</div>", unsafe_allow_html=True)
+            for message in messages:
+                st.markdown(
+                    f"<div class='alert-custom warning'>{message}</div>",
+                    unsafe_allow_html=True,
+                )
 
     with col_right:
         with st.container(border=True):
-            st.markdown("**\u4eca\u65e5\u306e\u30bf\u30b9\u30af**")
-            if not today_aas:
-                st.markdown("<div class='empty-state'><span class='emoji'>\U0001f389</span>\u4eca\u65e5\u306e\u30bf\u30b9\u30af\u306f\u3042\u308a\u307e\u305b\u3093</div>", unsafe_allow_html=True)
+            st.markdown("**今日のタスク**")
+            if not today_assignments:
+                st.markdown(
+                    "<div class='empty-state'><span class='emoji'>🎉</span>今日のタスクはありません</div>",
+                    unsafe_allow_html=True,
+                )
             else:
-                tasks = load_tasks() or get_initial_tasks()
-                tm = {t.id: t for t in tasks}
-                for a in today_aas:
-                    t = tm.get(a.task_id)
-                    if not t:
+                task_map = {task.id: task for task in load_tasks() or get_initial_tasks()}
+                for assignment in today_assignments:
+                    task = task_map.get(assignment.task_id)
+                    if not task:
                         continue
-                    assignee = pair.my_name if a.assignee_id == "me" else pair.partner_name
+                    assignee = pair.my_name if assignment.assignee_id == "me" else pair.partner_name
                     c1, c2, c3 = st.columns([0.4, 4, 1.6])
-                    done = c1.checkbox("", value=a.completed, key=f"ht_{a.id}", label_visibility="collapsed")
-                    if done != a.completed:
-                        a.completed = done
+                    done = c1.checkbox(
+                        "",
+                        value=assignment.completed,
+                        key=f"ht_{assignment.id}",
+                        label_visibility="collapsed",
+                    )
+                    if done != assignment.completed:
+                        assignment.completed = done
                         persist()
-                    c2.markdown(f"**{t.name}**")
-                    cat_color = CAT_COLORS.get(t.category, "#999")
-                    c3.markdown(f"<span class='tag' style='background:{cat_color}20;color:{cat_color};'>{assignee}</span>", unsafe_allow_html=True)
+                    c2.markdown(f"**{task.name}**")
+                    category_color = CAT_COLORS.get(task.category, "#999")
+                    c3.markdown(
+                        f"<span class='tag' style='background:{category_color}20;color:{category_color};'>{assignee}</span>",
+                        unsafe_allow_html=True,
+                    )
 
     with st.container(border=True):
-        st.markdown("**\u611f\u8b1d\u30dd\u30a4\u30f3\u30c8**")
-        grats = st.session_state.gratitudes
-        from_me = sum(1 for g in grats if g.from_id == "me")
-        to_me = sum(1 for g in grats if g.to_id == "me")
-        c1, c2, c3 = st.columns([1, 1, 3])
-        c1.metric(f"{pair.my_name}\u2192{pair.partner_name}", from_me)
-        c2.metric(f"{pair.partner_name}\u2192{pair.my_name}", to_me)
+        st.markdown("**感謝ポイント**")
+        gratitudes = st.session_state.gratitudes
+        from_me = sum(1 for gratitude in gratitudes if gratitude.from_id == "me")
+        to_me = sum(1 for gratitude in gratitudes if gratitude.to_id == "me")
+        c1, c2, _ = st.columns([1, 1, 3])
+        c1.metric(f"{pair.my_name}→{pair.partner_name}", from_me)
+        c2.metric(f"{pair.partner_name}→{pair.my_name}", to_me)
 
 
 def page_tasks():
     tasks = load_tasks() or get_initial_tasks()
-    aas = st.session_state.assignments
+    assignments = st.session_state.assignments
     pair = st.session_state.pair
 
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title("\U0001f4cb \u30bf\u30b9\u30af\u7ba1\u7406")
+    st.title("📋 タスク管理")
 
     col_filter, col_add = st.columns([3, 2])
     with col_filter:
-        cats = ["\u3059\u3079\u3066"] + list(dict.fromkeys(t.category for t in tasks))
-        sel_cat = st.selectbox("\u30ab\u30c6\u30b4\u30ea\u30d5\u30a3\u30eb\u30bf\u30fc", cats, label_visibility="collapsed")
+        categories = ["すべて"] + list(dict.fromkeys(task.category for task in tasks))
+        selected_category = st.selectbox(
+            "カテゴリフィルター",
+            categories,
+            label_visibility="collapsed",
+        )
     with col_add:
-        expand = st.popover("\uff0b \u30bf\u30b9\u30af\u8ffd\u52a0", use_container_width=True)
-        with expand:
-            nn = st.text_input("\u30bf\u30b9\u30af\u540d", placeholder="\u30bf\u30b9\u30af\u540d", label_visibility="collapsed")
-            nc = st.selectbox("\u30ab\u30c6\u30b4\u30ea", ["\u6599\u7406", "\u6383\u9664", "\u8cb7\u3044\u7269", "\u80b2\u5150", "\u30da\u30c3\u30c8", "\u624b\u7d9a\u304d", "\u305d\u306e\u4ed6"], label_visibility="collapsed")
-            if st.button("\u8ffd\u52a0", use_container_width=True) and nn:
-                tid = get_next_id(tasks)
-                tasks.append(Task(id=tid, name=nn, category=nc, physical_score=5, mental_score=3, default_frequency="irregular"))
+        add_popover = st.popover("＋ タスク追加", use_container_width=True)
+        with add_popover:
+            new_name = st.text_input(
+                "タスク名",
+                placeholder="タスク名",
+                label_visibility="collapsed",
+            )
+            new_category = st.selectbox(
+                "カテゴリ",
+                ["料理", "掃除", "買い物", "育児", "ペット", "手続き", "その他"],
+                label_visibility="collapsed",
+            )
+            if st.button("追加", use_container_width=True) and new_name:
+                task_id = get_next_id(tasks)
+                tasks.append(
+                    Task(
+                        id=task_id,
+                        name=new_name,
+                        category=new_category,
+                        physical_score=5,
+                        mental_score=3,
+                        default_frequency="irregular",
+                    )
+                )
                 save_tasks(tasks)
                 st.rerun()
 
-    filtered = tasks if sel_cat == "\u3059\u3079\u3066" else [t for t in tasks if t.category == sel_cat]
+    filtered = tasks if selected_category == "すべて" else [
+        task for task in tasks if task.category == selected_category
+    ]
 
-    for t in filtered:
-        existing = next((a for a in aas if a.task_id == t.id), None)
-        cat_color = CAT_COLORS.get(t.category, "#999")
+    for task in filtered:
+        existing = next(
+            (assignment for assignment in assignments if assignment.task_id == task.id),
+            None,
+        )
+        category_color = CAT_COLORS.get(task.category, "#999")
         assigned = existing is not None
         assignee = existing.assignee_id if existing else None
 
         with st.container(border=True):
-            cols = st.columns([0.35, 4.5, 1.5, 0.65])
-            done = cols[0].checkbox("", value=existing.completed if existing else False, key=f"c_{t.id}", label_visibility="collapsed", disabled=not assigned)
+            columns = st.columns([0.35, 4.5, 1.5, 0.65])
+            done = columns[0].checkbox(
+                "",
+                value=existing.completed if existing else False,
+                key=f"c_{task.id}",
+                label_visibility="collapsed",
+                disabled=not assigned,
+            )
             if existing and done != existing.completed:
                 existing.completed = done
                 persist()
 
             badges = (
-                f"<span class='badge'>\U0001f4aa{t.physical_score}</span>"
-                f"<span class='badge'>\U0001f9e0{t.mental_score}</span>"
+                f"<span class='badge'>💪{task.physical_score}</span>"
+                f"<span class='badge'>🧠{task.mental_score}</span>"
             )
-            cols[1].markdown(
-                f"**{t.name}** "
-                f"<span class='tag' style='background:{cat_color}20;color:{cat_color};'>\u25cf {t.category}</span> "
+            columns[1].markdown(
+                f"**{task.name}** "
+                f"<span class='tag' style='background:{category_color}20;color:{category_color};'>● {task.category}</span> "
                 f"{badges}",
                 unsafe_allow_html=True,
             )
 
-            opts = ["\u672a\u5272\u5f53", pair.my_name, pair.partner_name]
-            def_idx = 0
+            options = ["未割当", pair.my_name, pair.partner_name]
+            default_index = 0
             if assignee == "me":
-                def_idx = 1
+                default_index = 1
             elif assignee == "partner":
-                def_idx = 2
-            selected = cols[2].selectbox("\u62c5\u5f53", opts, index=def_idx, key=f"a_{t.id}", label_visibility="collapsed")
+                default_index = 2
+            selected = columns[2].selectbox(
+                "担当",
+                options,
+                index=default_index,
+                key=f"a_{task.id}",
+                label_visibility="collapsed",
+            )
 
             if selected == pair.my_name:
-                new_aid = "me"
+                new_assignee = "me"
             elif selected == pair.partner_name:
-                new_aid = "partner"
+                new_assignee = "partner"
             else:
-                new_aid = None
+                new_assignee = None
 
-            if new_aid and not existing:
-                st.session_state.assignments.append(create_assignment(t.id, new_aid))
+            if new_assignee and not existing:
+                st.session_state.assignments.append(create_assignment(task.id, new_assignee))
                 persist()
                 st.rerun()
-            elif new_aid and existing and existing.assignee_id != new_aid:
-                existing.assignee_id = new_aid
+            elif new_assignee and existing and existing.assignee_id != new_assignee:
+                existing.assignee_id = new_assignee
                 persist()
+                st.rerun()
+            elif new_assignee is None and existing:
+                st.session_state.assignments = [
+                    assignment
+                    for assignment in st.session_state.assignments
+                    if assignment.id != existing.id
+                ]
+                st.session_state.gratitude_sent.discard(existing.id)
+                persist()
+                st.rerun()
 
             if existing and existing.completed:
                 sent = existing.id in st.session_state.gratitude_sent
                 if not sent:
-                    if cols[3].button("\U0001f44d", key=f"thx_{t.id}", help="\u3042\u308a\u304c\u3068\u3046\u3092\u9001\u308b"):
-                        st.session_state.gratitudes.append(GratitudePoint(
-                            id=str(uuid.uuid4())[:8],
-                            from_id="partner" if assignee == "me" else "me",
-                            to_id=assignee or "me",
-                            task_id=t.id,
-                        ))
+                    if columns[3].button("👍", key=f"thx_{task.id}", help="ありがとうを送る"):
+                        st.session_state.gratitudes.append(
+                            GratitudePoint(
+                                id=str(uuid.uuid4())[:8],
+                                from_id="partner" if assignee == "me" else "me",
+                                to_id=assignee or "me",
+                                task_id=task.id,
+                            )
+                        )
                         st.session_state.gratitude_sent.add(existing.id)
                         persist()
                         st.rerun()
                 else:
-                    cols[3].success("\U0001f44d")
+                    columns[3].success("👍")
 
 
 def page_analysis():
     pair = st.session_state.pair
-    s = calc_scores()
-    aas = st.session_state.assignments
-    tasks = load_tasks() or get_initial_tasks()
-    tm = {t.id: t for t in tasks}
+    scores = calc_scores()
+    assignments = st.session_state.assignments
+    task_map = {task.id: task for task in load_tasks() or get_initial_tasks()}
 
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title("\U0001f4ca \u8ca0\u62c5\u5206\u6790")
+    st.title("📊 負担分析")
 
-    tab1, tab2 = st.tabs(["\u30ab\u30c6\u30b4\u30ea\u5225", "\u7269\u7406 vs \u30e1\u30f3\u30bf\u30eb"])
+    tab_category, tab_type = st.tabs(["カテゴリ別", "物理 vs メンタル"])
 
-    with tab1:
-        cd = {}
-        for a in aas:
-            if a.completed:
-                t = tm.get(a.task_id)
-                if t:
-                    cd.setdefault(t.category, {"me_phys": 0, "me_ment": 0, "partner_phys": 0, "partner_ment": 0})
-                    uid = "me" if a.assignee_id == "me" else "partner"
-                    cd[t.category][f"{uid}_phys"] += t.physical_score
-                    cd[t.category][f"{uid}_ment"] += t.mental_score
+    with tab_category:
+        category_data = {}
+        for assignment in assignments:
+            if not assignment.completed:
+                continue
+            task = task_map.get(assignment.task_id)
+            if not task:
+                continue
+            category_data.setdefault(
+                task.category,
+                {"me_phys": 0, "me_ment": 0, "partner_phys": 0, "partner_ment": 0},
+            )
+            user_id = "me" if assignment.assignee_id == "me" else "partner"
+            category_data[task.category][f"{user_id}_phys"] += task.physical_score
+            category_data[task.category][f"{user_id}_ment"] += task.mental_score
 
-        if cd:
-            df = pd.DataFrame([
-                {"\u30ab\u30c6\u30b4\u30ea": cat, f"{pair.my_name}": v["me_phys"] + v["me_ment"],
-                 f"{pair.partner_name}": v["partner_phys"] + v["partner_ment"]}
-                for cat, v in cd.items()
-            ])
-            melted = df.melt(id_vars=["\u30ab\u30c6\u30b4\u30ea"], var_name="\u62c5\u5f53\u8005", value_name="\u8ca0\u62c5")
-            chart = alt.Chart(melted).mark_bar(opacity=0.85, cornerRadius=4).encode(
-                x=alt.X("\u30ab\u30c6\u30b4\u30ea:N", sort="-y"),
-                y="\u8ca0\u62c5:Q",
-                color=alt.Color("\u62c5\u5f53\u8005:N", scale=alt.Scale(range=[BLUE, ORANGE])),
-                column=alt.Column("\u62c5\u5f53\u8005:N"),
-            ).properties(height=300)
+        if category_data:
+            dataframe = pd.DataFrame(
+                [
+                    {
+                        "カテゴリ": category,
+                        pair.my_name: values["me_phys"] + values["me_ment"],
+                        pair.partner_name: values["partner_phys"] + values["partner_ment"],
+                    }
+                    for category, values in category_data.items()
+                ]
+            )
+            melted = dataframe.melt(
+                id_vars=["カテゴリ"],
+                var_name="担当者",
+                value_name="負担",
+            )
+            chart = (
+                alt.Chart(melted)
+                .mark_bar(opacity=0.85, cornerRadius=4)
+                .encode(
+                    x=alt.X("カテゴリ:N", sort="-y"),
+                    y="負担:Q",
+                    color=alt.Color(
+                        "担当者:N",
+                        scale=alt.Scale(range=[BLUE, ORANGE]),
+                    ),
+                    column=alt.Column("担当者:N"),
+                )
+                .properties(height=300)
+            )
             st.altair_chart(chart, use_container_width=True)
         else:
-            st.markdown("<div class='empty-state'><span class='emoji'>\U0001f4ed</span>\u5b8c\u4e86\u3057\u305f\u30bf\u30b9\u30af\u304c\u3042\u308a\u307e\u305b\u3093<br>\u30bf\u30b9\u30af\u3092\u5b8c\u4e86\u3059\u308b\u3068\u30b0\u30e9\u30d5\u304c\u8868\u793a\u3055\u308c\u307e\u3059</div>", unsafe_allow_html=True)
+            st.markdown(
+                "<div class='empty-state'><span class='emoji'>📭</span>完了したタスクがありません<br>タスクを完了するとグラフが表示されます</div>",
+                unsafe_allow_html=True,
+            )
 
-        with st.expander("\u30ab\u30c6\u30b4\u30ea\u5225 \u8ca0\u62c5\u30b9\u30b3\u30a2\u8a73\u7d30"):
-            if cd:
-                detail = pd.DataFrame([
-                    {"\u30ab\u30c6\u30b4\u30ea": cat,
-                     f"{pair.my_name} \u7269\u7406": v["me_phys"],
-                     f"{pair.my_name} \u30e1\u30f3\u30bf\u30eb": v["me_ment"],
-                     f"{pair.partner_name} \u7269\u7406": v["partner_phys"],
-                     f"{pair.partner_name} \u30e1\u30f3\u30bf\u30eb": v["partner_ment"]}
-                    for cat, v in cd.items()
-                ])
+        with st.expander("カテゴリ別 負担スコア詳細"):
+            if category_data:
+                detail = pd.DataFrame(
+                    [
+                        {
+                            "カテゴリ": category,
+                            f"{pair.my_name} 物理": values["me_phys"],
+                            f"{pair.my_name} メンタル": values["me_ment"],
+                            f"{pair.partner_name} 物理": values["partner_phys"],
+                            f"{pair.partner_name} メンタル": values["partner_ment"],
+                        }
+                        for category, values in category_data.items()
+                    ]
+                )
                 st.dataframe(detail, hide_index=True, use_container_width=True)
 
-    with tab2:
-        ratio_df = pd.DataFrame({
-            "\u7a2e\u985e": ["\u7269\u7406\u8ca0\u62c5", "\u30e1\u30f3\u30bf\u30eb\u8ca0\u62c5"],
-            pair.my_name: [s["me_phys"], s["me_ment"]],
-            pair.partner_name: [s["partner_phys"], s["partner_ment"]],
-        })
-        ratio = alt.Chart(ratio_df).transform_fold(
-            [pair.my_name, pair.partner_name], as_=["\u62c5\u5f53\u8005", "\u5024"]
-        ).mark_bar(opacity=0.85, cornerRadius=4).encode(
-            x=alt.X("\u7a2e\u985e:N"),
-            y="\u5024:Q",
-            color=alt.Color("\u62c5\u5f53\u8005:N", scale=alt.Scale(range=[BLUE, ORANGE])),
-            xOffset="\u62c5\u5f53\u8005:N",
-        ).properties(height=300)
+    with tab_type:
+        ratio_dataframe = pd.DataFrame(
+            {
+                "種類": ["物理負担", "メンタル負担"],
+                pair.my_name: [scores["me_phys"], scores["me_ment"]],
+                pair.partner_name: [scores["partner_phys"], scores["partner_ment"]],
+            }
+        )
+        ratio = (
+            alt.Chart(ratio_dataframe)
+            .transform_fold([pair.my_name, pair.partner_name], as_=["担当者", "値"])
+            .mark_bar(opacity=0.85, cornerRadius=4)
+            .encode(
+                x=alt.X("種類:N"),
+                y="値:Q",
+                color=alt.Color(
+                    "担当者:N",
+                    scale=alt.Scale(range=[BLUE, ORANGE]),
+                ),
+                xOffset="担当者:N",
+            )
+            .properties(height=300)
+        )
         st.altair_chart(ratio, use_container_width=True)
 
         with st.container(border=True):
-            st.markdown("**\u30b5\u30de\u30ea\u30fc**")
-            cols = st.columns(4)
-            cols[0].metric(f"{pair.my_name} \u7269\u7406", f"{s['me_phys']}%")
-            cols[1].metric(f"{pair.my_name} \u30e1\u30f3\u30bf\u30eb", f"{s['me_ment']}%")
-            cols[2].metric(f"{pair.partner_name} \u7269\u7406", f"{s['partner_phys']}%")
-            cols[3].metric(f"{pair.partner_name} \u30e1\u30f3\u30bf\u30eb", f"{s['partner_ment']}%")
+            st.markdown("**サマリー**")
+            columns = st.columns(4)
+            columns[0].metric(f"{pair.my_name} 物理", f"{scores['me_phys']}%")
+            columns[1].metric(f"{pair.my_name} メンタル", f"{scores['me_ment']}%")
+            columns[2].metric(f"{pair.partner_name} 物理", f"{scores['partner_phys']}%")
+            columns[3].metric(f"{pair.partner_name} メンタル", f"{scores['partner_ment']}%")
 
 
 def page_settings():
     pair = st.session_state.pair
     st.markdown(CSS, unsafe_allow_html=True)
-    st.title("\u2699\ufe0f \u8a2d\u5b9a")
+    st.title("⚙️ 設定")
 
     with st.container(border=True):
-        st.markdown("**\U0001f464 \u30d7\u30ed\u30d5\u30a3\u30fc\u30eb**")
-        my_name = st.text_input("\u3042\u306a\u305f\u306e\u540d\u524d", value=pair.my_name)
-        partner_name = st.text_input("\u30d1\u30fc\u30c8\u30ca\u30fc\u306e\u540d\u524d", value=pair.partner_name)
+        st.markdown("**👤 プロフィール**")
+        my_name = st.text_input("あなたの名前", value=pair.my_name)
+        partner_name = st.text_input("パートナーの名前", value=pair.partner_name)
         if my_name != pair.my_name or partner_name != pair.partner_name:
             pair.my_name = my_name
             pair.partner_name = partner_name
             persist()
 
     with st.container(border=True):
-        st.markdown("**\U0001f517 \u30da\u30a2\u9023\u643a**")
-        if not pair.invite_code:
-            pair.invite_code = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
-            persist()
-        c1, c2 = st.columns([3, 1])
-        c1.code(pair.invite_code)
-        if c2.button("\u518d\u751f\u6210", use_container_width=True):
-            pair.invite_code = "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
-            persist()
-            st.rerun()
-        status = "\u2705 \u63a5\u7d9a\u6e08\u307f" if pair.paired else "\u23f3 \u672a\u63a5\u7d9a"
-        st.markdown(f"\u30b9\u30c6\u30fc\u30bf\u30b9: {status}")
-        invite = st.text_input("\u76f8\u624b\u306e\u30b3\u30fc\u30c9\u3092\u5165\u529b", placeholder="XXXXXX")
-        if st.button("\u63a5\u7d9a", use_container_width=True) and invite:
-            if invite.strip().upper() == pair.invite_code:
-                pair.paired = True
-                persist()
-                st.success("\u30da\u30a2\u63a5\u7d9a\u5b8c\u4e86\uff01")
-                st.rerun()
-            else:
-                st.error("\u30b3\u30fc\u30c9\u304c\u4e00\u81f4\u3057\u307e\u305b\u3093")
+        st.markdown("**🔗 ペア連携**")
+        st.info(
+            "ペア同期は現在未実装です。この画面の記録は、このアプリを実行している端末内だけに保存されます。"
+        )
 
     with st.container(border=True):
-        st.markdown("**\U0001f514 \u901a\u77e5**")
-        st.toggle("\u671d\u306e\u30ea\u30de\u30a4\u30f3\u30c0\u30fc (07:00)", value=True)
-        st.toggle("\u30bf\u30b9\u30af\u5b8c\u4e86\u901a\u77e5", value=True)
-        st.toggle("\u30d0\u30e9\u30f3\u30b9\u30a2\u30e9\u30fc\u30c8", value=True)
+        st.markdown("**🔔 通知**")
+        st.toggle("朝のリマインダー (07:00)", value=True, disabled=True)
+        st.toggle("タスク完了通知", value=True, disabled=True)
+        st.toggle("バランスアラート", value=True, disabled=True)
+        st.caption("通知機能は準備中です。")
 
     with st.container(border=True):
-        st.markdown("**\u2b50 \u30d7\u30ec\u30df\u30a2\u30e0**")
-        st.info("\u73fe\u5728: \u7121\u6599\u30d7\u30e9\u30f3")
-        st.button("\u30a2\u30c3\u30d7\u30b0\u30ec\u30fc\u30c9", type="primary", use_container_width=True, disabled=True)
-        st.caption("\u30d7\u30ec\u30df\u30a2\u30e0: \u30bf\u30b9\u30af\u7121\u5236\u9650\u30fb\u6708\u9593\u30b0\u30e9\u30d5\u30fb\u8a73\u7d30\u5206\u6790\uff08\u6e96\u5099\u4e2d\uff09")
+        st.markdown("**⭐ プレミアム**")
+        st.info("現在: 無料プラン")
+        st.button(
+            "アップグレード",
+            type="primary",
+            use_container_width=True,
+            disabled=True,
+        )
+        st.caption("プレミアム: タスク無制限・月間グラフ・詳細分析（準備中）")
 
     with st.container(border=True):
-        st.markdown("**\U0001f4ca \u30c7\u30fc\u30bf\u7ba1\u7406**")
-        if st.button("\u30c7\u30fc\u30bf\u3092\u30ea\u30bb\u30c3\u30c8", use_container_width=True):
-            for k in ["assignments", "gratitudes", "pair", "gratitude_sent"]:
-                if k in st.session_state:
-                    del st.session_state[k]
+        st.markdown("**📊 データ管理**")
+        confirm_reset = st.checkbox(
+            "保存済みのタスク、割り当て、感謝、プロフィールをすべて削除する",
+            key="confirm_data_reset",
+        )
+        if st.button(
+            "データをリセット",
+            use_container_width=True,
+            disabled=not confirm_reset,
+        ):
+            reset_all_data()
+            for key in [
+                "assignments",
+                "gratitudes",
+                "pair",
+                "gratitude_sent",
+                "editing",
+                "confirm_data_reset",
+            ]:
+                st.session_state.pop(key, None)
             st.rerun()
 
 
@@ -407,25 +527,30 @@ def main():
     persist()
 
     with st.sidebar:
-        st.title("\U0001f3e0 KajiBalance")
-        st.caption("\u898b\u3048\u306a\u3044\u5bb6\u4e8b\u3092\u53ef\u8996\u5316\u3059\u308b")
+        st.title("🏠 KajiBalance")
+        st.caption("見えない家事を可視化する")
         st.divider()
 
         page = st.radio(
-            "\u30ca\u30d3\u30b2\u30fc\u30b7\u30e7\u30f3",
-            ["\U0001f4ca \u30db\u30fc\u30e0", "\U0001f4cb \u30bf\u30b9\u30af", "\U0001f4c8 \u5206\u6790", "\u2699\ufe0f \u8a2d\u5b9a"],
+            "ナビゲーション",
+            ["📊 ホーム", "📋 タスク", "📈 分析", "⚙️ 設定"],
             label_visibility="collapsed",
         )
 
         st.divider()
-        grats = st.session_state.gratitudes
-        to_me = sum(1 for g in grats if g.to_id == "me")
-        st.metric("\U0001f44d \u3082\u3089\u3063\u305f\u611f\u8b1d", to_me)
-        st.caption("\u00a9 2026 KajiBalance")
+        gratitudes = st.session_state.gratitudes
+        to_me = sum(1 for gratitude in gratitudes if gratitude.to_id == "me")
+        st.metric("👍 もらった感謝", to_me)
+        st.caption("© 2026 KajiBalance")
 
-    pg = page.split(" ")[1]
-    pages = {"\u30db\u30fc\u30e0": page_home, "\u30bf\u30b9\u30af": page_tasks, "\u5206\u6790": page_analysis, "\u8a2d\u5b9a": page_settings}
-    pages[pg]()
+    page_name = page.split(" ")[1]
+    pages = {
+        "ホーム": page_home,
+        "タスク": page_tasks,
+        "分析": page_analysis,
+        "設定": page_settings,
+    }
+    pages[page_name]()
 
 
 if __name__ == "__main__":
