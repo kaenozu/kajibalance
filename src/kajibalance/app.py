@@ -4,6 +4,7 @@
 
 import uuid
 from datetime import datetime
+from typing import cast
 
 import altair as alt
 import pandas as pd
@@ -23,7 +24,7 @@ from .data import (
     save_pair,
     save_tasks,
 )
-from .models import GratitudePoint, Task
+from .models import Category, GratitudePoint, Task
 
 st.set_page_config(page_title="KajiBalance", page_icon="🏠", layout="wide")
 
@@ -233,10 +234,13 @@ def page_tasks():
                 placeholder="タスク名",
                 label_visibility="collapsed",
             )
-            new_category = st.selectbox(
-                "カテゴリ",
-                ["料理", "掃除", "買い物", "育児", "ペット", "手続き", "その他"],
-                label_visibility="collapsed",
+            new_category = cast(
+                Category,
+                st.selectbox(
+                    "カテゴリ",
+                    ["料理", "掃除", "買い物", "育児", "ペット", "手続き", "その他"],
+                    label_visibility="collapsed",
+                ),
             )
             if st.button("追加", use_container_width=True) and new_name:
                 task_id = get_next_id(tasks)
