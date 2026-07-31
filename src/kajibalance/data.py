@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import TypeAdapter
 
-from .models import GratitudePoint, PairConfig, Task, TaskAssignment
+from .models import Category, Frequency, GratitudePoint, PairConfig, Task, TaskAssignment
 
 DATA_DIR = Path(__file__).parent.parent.parent / "data"
 TASKS_FILE = DATA_DIR / "tasks.json"
@@ -119,7 +119,7 @@ def get_next_id(tasks: list[Task]) -> str:
 
 
 def get_initial_tasks() -> list[Task]:
-    rows = [
+    rows: list[tuple[int, str, Category, int, int, Frequency]] = [
         (1,"夕飯の献立を考える","料理",1,9,"daily"),
         (2,"夕飯を作る","料理",7,4,"daily"),
         (3,"食器を洗う","料理",6,1,"daily"),
