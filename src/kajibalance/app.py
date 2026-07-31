@@ -2,8 +2,8 @@
 # Streamlitメインアプリ — UI改善版
 # タスク行のコンパクト化、バランス表示の改善、空状態の充実、統一カラーパレット
 
-from datetime import date
 import uuid
+from datetime import datetime
 
 import altair as alt
 import pandas as pd
@@ -121,7 +121,10 @@ def page_home():
     scores = calc_scores()
     pair = st.session_state.pair
     assignments = st.session_state.assignments
-    today_assignments = [assignment for assignment in assignments if assignment.due_date == date.today()]
+    today = datetime.now().astimezone().date()
+    today_assignments = [
+        assignment for assignment in assignments if assignment.due_date == today
+    ]
 
     st.markdown(CSS, unsafe_allow_html=True)
     st.title("📊 今週のバランス")
@@ -165,37 +168,36 @@ def page_home():
                     unsafe_allow_html=True,
                 )
 
-    with col_right:
-        with st.container(border=True):
-            st.markdown("**今日のタスク**")
-            if not today_assignments:
-                st.markdown(
-                    "<div class='empty-state'><span class='emoji'>🎉</span>今日のタスクはありません</div>",
+    with col_right, st.container(border=True):
+        st.markdown("**今日のタスク**")
+        if not today_assignments:
+            st.markdown(
+                "<div class='empty-state'><span class='emoji'>🎉</span>今日のタスクはありません</div>",
+                unsafe_allow_html=True,
+            )
+        else:
+            task_map = {task.id: task for task in load_tasks() or get_initial_tasks()}
+            for assignment in today_assignments:
+                task = task_map.get(assignment.task_id)
+                if not task:
+                    continue
+                assignee = pair.my_name if assignment.assignee_id == "me" else pair.partner_name
+                c1, c2, c3 = st.columns([0.4, 4, 1.6])
+                done = c1.checkbox(
+                    "",
+                    value=assignment.completed,
+                    key=f"ht_{assignment.id}",
+                    label_visibility="collapsed",
+                )
+                if done != assignment.completed:
+                    assignment.completed = done
+                    persist()
+                c2.markdown(f"**{task.name}**")
+                category_color = CAT_COLORS.get(task.category, "#999")
+                c3.markdown(
+                    f"<span class='tag' style='background:{category_color}20;color:{category_color};'>{assignee}</span>",
                     unsafe_allow_html=True,
                 )
-            else:
-                task_map = {task.id: task for task in load_tasks() or get_initial_tasks()}
-                for assignment in today_assignments:
-                    task = task_map.get(assignment.task_id)
-                    if not task:
-                        continue
-                    assignee = pair.my_name if assignment.assignee_id == "me" else pair.partner_name
-                    c1, c2, c3 = st.columns([0.4, 4, 1.6])
-                    done = c1.checkbox(
-                        "",
-                        value=assignment.completed,
-                        key=f"ht_{assignment.id}",
-                        label_visibility="collapsed",
-                    )
-                    if done != assignment.completed:
-                        assignment.completed = done
-                        persist()
-                    c2.markdown(f"**{task.name}**")
-                    category_color = CAT_COLORS.get(task.category, "#999")
-                    c3.markdown(
-                        f"<span class='tag' style='background:{category_color}20;color:{category_color};'>{assignee}</span>",
-                        unsafe_allow_html=True,
-                    )
 
     with st.container(border=True):
         st.markdown("**感謝ポイント**")
