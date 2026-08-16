@@ -235,12 +235,14 @@ def page_tasks():
     st.markdown("\u2193 \u30af\u30ea\u30c3\u30af\u3067\u8ffd\u52a0", help="\u3088\u304f\u4f7f\u3046\u30bf\u30b9\u30af\u3092\u4e00\u62ec\u767b\u9332")
     cols = st.columns(5)
     for i, (tname, tcat, tphys, tment) in enumerate(TEMPLATES):
-        if cols[i % 5].button(f"{tname}", key=f"q_{i}", use_container_width=True, type="tertiary"):
-            if not any(t.name == tname for t in tasks):
-                tid = get_next_id(tasks)
-                tasks.append(Task(id=tid, name=tname, category=tcat, physical_score=tphys, mental_score=tment, default_frequency="irregular"))
-                save_tasks(tasks)
-                st.rerun()
+        if (
+            cols[i % 5].button(f"{tname}", key=f"q_{i}", use_container_width=True, type="tertiary")
+            and not any(t.name == tname for t in tasks)
+        ):
+            tid = get_next_id(tasks)
+            tasks.append(Task(id=tid, name=tname, category=tcat, physical_score=tphys, mental_score=tment, default_frequency="irregular"))
+            save_tasks(tasks)
+            st.rerun()
 
     with st.container(border=True):
         c1, c2, c3, c4, c5 = st.columns([3, 1.5, 0.8, 0.8, 1])
@@ -248,12 +250,15 @@ def page_tasks():
         nc = c2.selectbox("\u30ab\u30c6\u30b4\u30ea", ["\u6599\u7406", "\u6383\u9664", "\u8cb7\u3044\u7269", "\u80b2\u5150", "\u30da\u30c3\u30c8", "\u624b\u7d9a\u304d", "\u305d\u306e\u4ed6"], label_visibility="collapsed")
         nphys = c3.number_input("\U0001f4aa", value=5, min_value=1, max_value=10, label_visibility="collapsed")
         nment = c4.number_input("\U0001f9e0", value=3, min_value=1, max_value=10, label_visibility="collapsed")
-        if c5.button("\u8ffd\u52a0", use_container_width=True, type="primary") and nn:
-            if not any(t.name == nn for t in tasks):
-                tid = get_next_id(tasks)
-                tasks.append(Task(id=tid, name=nn, category=nc, physical_score=nphys, mental_score=nment, default_frequency="irregular"))
-                save_tasks(tasks)
-                st.rerun()
+        if (
+            c5.button("\u8ffd\u52a0", use_container_width=True, type="primary")
+            and nn
+            and not any(t.name == nn for t in tasks)
+        ):
+            tid = get_next_id(tasks)
+            tasks.append(Task(id=tid, name=nn, category=nc, physical_score=nphys, mental_score=nment, default_frequency="irregular"))
+            save_tasks(tasks)
+            st.rerun()
 
     col_filter, col_add = st.columns([3, 2])
     with col_filter:
