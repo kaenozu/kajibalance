@@ -13,6 +13,8 @@ data/*.json
 
 # Screenshots
 screenshots/
+screenshot_*.png
+snapshot_*.txt
 
 # IDE
 .vscode/
