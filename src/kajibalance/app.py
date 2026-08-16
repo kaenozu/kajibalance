@@ -235,7 +235,6 @@ def page_tasks():
     st.markdown("\u2193 \u30af\u30ea\u30c3\u30af\u3067\u8ffd\u52a0", help="\u3088\u304f\u4f7f\u3046\u30bf\u30b9\u30af\u3092\u4e00\u62ec\u767b\u9332")
     cols = st.columns(5)
     for i, (tname, tcat, tphys, tment) in enumerate(TEMPLATES):
-        cat_color = CAT_COLORS.get(tcat, "#999")
         if cols[i % 5].button(f"{tname}", key=f"q_{i}", use_container_width=True, type="tertiary"):
             if not any(t.name == tname for t in tasks):
                 tid = get_next_id(tasks)
@@ -256,7 +255,7 @@ def page_tasks():
                 save_tasks(tasks)
                 st.rerun()
 
-    col_filter, _ = st.columns([3, 2])
+    col_filter, col_add = st.columns([3, 2])
     with col_filter:
         categories = ["すべて"] + list(dict.fromkeys(task.category for task in tasks))
         selected_category = st.selectbox(
