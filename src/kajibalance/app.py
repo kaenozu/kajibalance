@@ -240,7 +240,7 @@ def page_tasks():
             and not any(t.name == tname for t in tasks)
         ):
             tid = get_next_id(tasks)
-            tasks.append(Task(id=tid, name=tname, category=tcat, physical_score=tphys, mental_score=tment, default_frequency="irregular"))
+            tasks.append(Task(id=tid, name=tname, category=cast(Category, tcat), physical_score=tphys, mental_score=tment, default_frequency="irregular"))
             save_tasks(tasks)
             st.rerun()
 
@@ -256,7 +256,7 @@ def page_tasks():
             and not any(t.name == nn for t in tasks)
         ):
             tid = get_next_id(tasks)
-            tasks.append(Task(id=tid, name=nn, category=nc, physical_score=nphys, mental_score=nment, default_frequency="irregular"))
+            tasks.append(Task(id=tid, name=nn, category=cast(Category, nc), physical_score=nphys, mental_score=nment, default_frequency="irregular"))
             save_tasks(tasks)
             st.rerun()
 
